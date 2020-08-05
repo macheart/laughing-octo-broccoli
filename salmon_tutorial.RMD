@@ -1,0 +1,125 @@
+---
+title: "salmon_tutorial"
+author: "Prisma E. Lopez Jimenez"
+date: "7/17/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r installations, include=FALSE}
+#if (!requireNamespace("BiocManager", quietly = TRUE))
+    #install.packages("BiocManager")
+
+library(tximport)
+library(tximportData)
+library(biomaRt) 
+library(org.At.tair.db) 
+library(TxDb.Athaliana.BioMart.plantsmart28)
+library(biomartr)
+library(xml2) # cran
+library(ensembldb)
+library(AnnotationHub)
+library(GenomicFeatures)
+library(GenomicRanges)
+library(DESeq2)
+library(DESeq)
+library(BiocGenerics)
+library(tidyverse)
+library(plyr)
+library(ReactomePA)
+library(AnnotationDb)
+```
+
+```{r}
+### Load the quant.sf files as `files` and the sample folders as `folders`
+# dir # set the working directory and `dir` as location of quant folders
+# "C:/Users/PELJ/Dropbox/bioinformatics/salmon_tutorial/quants"
+setwd("C:/Users/Prisma/Dropbox/Prisma _comp_documents_7-14-2020/bioinformatics/rna-seq/tutorials/salmon/salmon_tutorial/quants") 
+dir=getwd()
+folders=list.files(file.path(dir))
+files <- file.path(dir,folders, "quant.sf")
+names(files)=paste0("sample",1:16)
+all(file.exists(files)) # check 
+```
+
+```{r}
+### Inspect the biomaRt database: TxDb.Athaliana.BioMart.plantsmart28 
+### Also, shortcut to building a tx2gene
+
+txdb=TxDb.Athaliana.BioMart.plantsmart28 # txdb object
+columns(txdb)
+keytypes(txdb)
+k <- keys(txdb, keytype="TXNAME") # TXNAME keys
+tx2gene <- select(txdb, k, "GENEID", "TXNAME") # column1 TXNAME column 2 GENEID
+# Reference: https://kasperdanielhansen.github.io/genbioconductor/html/GenomicRanges_GRanges_Usage.html
+```
+
+```{r}
+txi <- tximport(files, type="salmon", tx2gene=tx2gene) # row names are GENEID in `tx2gene`
+# not all keys in txi are in gene keys
+# no txname keys are in `txi`
+
+samples <- read.csv("metadata_copy.csv",sep=",",header=TRUE)
+colnames(txi$counts)=samples$experiment_accession
+
+
+dds <- DESeqDataSetFromTximport(txi, colData=samples, design=~ plant+ExperimentalCondition)
+```
+
+```{r}
+dds=DESeq(dds)
+res=results(dds)
+summary(res)
+#res_ord=res[order(res$padj),]
+
+res=data.frame(res)
+res$GENEID=rownames(res) # ifelse equal to `res_ord`
+```
+
+```{r}
+### PCA
+vsdata=vst(dds,blind=FALSE)
+plotPCA(vsdata,intgroup="ExperimentalCondition")
+
+```
+
+
+```{r}
+x <- org.At.tairENTREZID
+mapped_genes <- mappedkeys(x)
+xx <- as.list(x[mapped_genes])
+geneIds=names(xx)
+df=ldply(xx,data.frame) #data.frame(matrix(unlist(xx),nrow=length(xx),byrow=T))
+colnames(df)=c("GENEID","entrezID")
+
+
+
+dfn=merge(res,df,'GENEID')
+#write.csv(dfn,"a.thaliana.entrezid.geneid.csv")
+
+```
+
+```{r}
+dfn.l2fc=dfn %>% filter(`log2FoldChange` > 1.5)
+
+
+de=dfn.l2fc$entrezID
+de=as.character(dfn.l2fc$entrezID)
+#x=enrichPathway(gene=de,pvalueCutoff = 0.05,readable=T,organism="athaliana") ### one of "human", "rat", "mouse", "celegans", "yeast", "zebrafish", "fly".
+
+```
+
+
+```{r}
+
+
+
+```
+
+
+
+
+
+
+
